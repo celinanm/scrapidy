@@ -1,10 +1,9 @@
 name: Scrape YC Founders
 
-# Run 4 times per month: 1st, 8th, 15th, and 22nd at 9:00 AM UTC
 on:
   schedule:
     - cron: '0 9 1,8,15,22 * *'
-  workflow_dispatch: # Allows manual trigger for testing
+  workflow_dispatch:
 
 jobs:
   scrape:
@@ -35,7 +34,6 @@ jobs:
         
     - name: Run YC Founders scraper
       run: |
-        # Force headless mode for GitHub Actions
         sed -i 's/headless=False/headless=True/g' run_yc_scraper.py
         python run_yc_scraper.py
         
@@ -54,16 +52,9 @@ jobs:
         body: |
           Automated scrape of YC Founders data
           
-          **Download the CSV file below** ⬇️
+          Download the CSV file below
           
           Generated on: ${{ steps.timestamp.outputs.timestamp }}
-          
-          This file contains:
-          - Founder names
-          - Current roles and companies  
-          - YC batch information
-          - LinkedIn URLs
-          - Profile URLs
         draft: false
         prerelease: false
         
