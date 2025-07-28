@@ -1,69 +1,11 @@
-name: Scrape YC Founders
+name: Test Workflow
 
 on:
-  schedule:
-    - cron: '0 9 1,8,15,22 * *'
   workflow_dispatch:
 
 jobs:
-  scrape:
+  test:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-        
-    - name: Install Chrome
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y wget gnupg
-        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-        sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
-        sudo apt-get update
-        sudo apt-get install -y google-chrome-stable
-        
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        
-    - name: Run YC Founders scraper
-      run: |
-        sed -i 's/headless=False/headless=True/g' run_yc_scraper.py
-        python run_yc_scraper.py
-        
-    - name: Generate timestamp
-      id: timestamp
-      run: echo "timestamp=$(date +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_OUTPUT
-      
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: scrape-${{ steps.timestamp.outputs.timestamp }}
-        release_name: YC Founders Data - ${{ steps.timestamp.outputs.timestamp }}
-        body: |
-          Automated scrape of YC Founders data
-          
-          Download the CSV file below
-          
-          Generated on: ${{ steps.timestamp.outputs.timestamp }}
-        draft: false
-        prerelease: false
-        
-    - name: Upload CSV to Release
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./yc_founders.csv
-        asset_name: yc_founders.csv
-        asset_content_type: text/csv
+    - name: Test step
+      run: echo "Hello World"
