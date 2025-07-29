@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-YC Founders Scraper with Google Drive Upload
-Scrapes founder information from Y Combinator's founders page and uploads to Google Drive
+YC Founders Scraper with GitHub Commit
+Scrapes founder information and commits CSV back to GitHub repository
 """
 
 import time
 import csv
 import re
 import os
-import json
+import subprocess
 from typing import List, Dict, Optional
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -20,9 +20,6 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import pandas as pd
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
-from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 
@@ -42,9 +39,6 @@ class YCFoundersScraper:
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
-        
-        # Set Chrome binary path - comment out for default system detection
-        # chrome_options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
         
         try:
             # Try to use ChromeDriverManager first
@@ -308,71 +302,50 @@ class YCFoundersScraper:
             print(f"Error extracting LinkedIn URL: {str(e)}")
             return None
     
-    def setup_google_drive_service(self):
-        """Set up Google Drive API service using service account credentials"""
+    def commit_to_github(self, filename: str):
+        """Commit the CSV file back to GitHub repository"""
         try:
-            # Try to get credentials from environment variable (for GitHub Actions)
-            credentials_json = os.getenv('GOOGLE_SERVICE_ACCOUNT_KEY')
-            
-            if credentials_json:
-                # Parse JSON credentials from environment variable
-                credentials_info = json.loads(credentials_json)
-                credentials = Credentials.from_service_account_info(
-                    credentials_info,
-                    scopes=['https://www.googleapis.com/auth/drive.file']
-                )
-            else:
-                # Fallback to local credentials file (for local development)
-                credentials = Credentials.from_service_account_file(
-                    'service-account-key.json',
-                    scopes=['https://www.googleapis.com/auth/drive.file']
-                )
-            
-            service = build('drive', 'v3', credentials=credentials)
-            return service
-            
-        except Exception as e:
-            print(f"Error setting up Google Drive service: {str(e)}")
-            return None
-    
-    def upload_to_google_drive(self, filename: str, folder_id: str = None):
-        """Upload CSV file to Google Drive"""
-        try:
-            service = self.setup_google_drive_service()
-            if not service:
-                print("Failed to set up Google Drive service")
-                return False
-            
             # Create timestamp for unique filename
             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            drive_filename = f"yc_founders_{timestamp}.csv"
+            new_filename = f"data/yc_founders_{timestamp}.csv"
             
-            # File metadata
-            file_metadata = {
-                'name': drive_filename
-            }
+            # Create data directory if it doesn't exist
+            os.makedirs("data", exist_ok=True)
             
-            # If folder_id is provided, set the parent folder
-            if folder_id:
-                file_metadata['parents'] = [folder_id]
+            # Move file to data directory
+            if os.path.exists(filename):
+                os.rename(filename, new_filename)
+                print(f"📁 Moved CSV to: {new_filename}")
             
-            # Upload file
-            media = MediaFileUpload(filename, mimetype='text/csv')
-            file = service.files().create(
-                body=file_metadata,
-                media_body=media,
-                fields='id,name,webViewLink'
-            ).execute()
+            # Configure git (required for GitHub Actions)
+            subprocess.run(["git", "config", "user.name", "YC Scraper Bot"], check=True)
+            subprocess.run(["git", "config", "user.email", "action@github.com"], check=True)
             
-            print(f"✅ File uploaded to Google Drive successfully!")
-            print(f"📁 File name: {file.get('name')}")
-            print(f"🔗 File ID: {file.get('id')}")
-            print(f"🌐 View link: {file.get('webViewLink')}")
+            # Add the file
+            subprocess.run(["git", "add", new_filename], check=True)
+            
+            # Create commit message with timestamp and count
+            founders_count = len(self.founders_data)
+            commit_message = f"📊 YC Founders Data Update - {timestamp} ({founders_count} founders)"
+            
+            # Commit the file
+            subprocess.run(["git", "commit", "-m", commit_message], check=True)
+            
+            # Push to GitHub
+            subprocess.run(["git", "push"], check=True)
+            
+            print(f"✅ CSV committed to GitHub successfully!")
+            print(f"📊 File: {new_filename}")
+            print(f"👥 Founders: {founders_count}")
+            print(f"💬 Commit: {commit_message}")
             
             return True
             
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Git command failed: {str(e)}")
+            return False
         except Exception as e:
-            print(f"❌ Error uploading to Google Drive: {str(e)}")
+            print(f"❌ Error committing to GitHub: {str(e)}")
             return False
     
     def scrape_founders(self) -> List[Dict]:
@@ -445,25 +418,22 @@ def main():
     
     # Scrape founders data
     founders_data = scraper.scrape_founders()
+    scraper.founders_data = founders_data  # Store for commit method
     
     # Save to CSV
     if founders_data:
         filename = "yc_founders.csv"
         scraper.save_to_csv(founders_data, filename)
         
-        # Upload to Google Drive
-        print("\n🚀 Uploading to Google Drive...")
+        # Commit to GitHub
+        print("\n🚀 Committing CSV to GitHub...")
+        commit_success = scraper.commit_to_github(filename)
         
-        # Optional: Specify a folder ID where you want to upload the file
-        # Get this from your Google Drive URL: https://drive.google.com/drive/folders/YOUR_FOLDER_ID
-        folder_id = os.getenv('GOOGLE_DRIVE_FOLDER_ID')  # Set this as environment variable
-        
-        upload_success = scraper.upload_to_google_drive(filename, folder_id)
-        
-        if upload_success:
-            print("✅ Complete! CSV has been uploaded to Google Drive.")
+        if commit_success:
+            print("✅ Complete! CSV has been committed to GitHub repository.")
+            print("📥 You can download it from the 'data' folder in your repo.")
         else:
-            print("❌ Upload failed, but CSV file is saved locally.")
+            print("❌ Commit failed, but CSV file is saved locally.")
         
         # Print summary
         print("\nScraping Summary:")
