@@ -37,33 +37,15 @@ jobs:
         sed -i 's/headless=False/headless=True/g' run_yc_scraper.py
         python run_yc_scraper.py
         
-    - name: Generate timestamp
-      id: timestamp
-      run: echo "timestamp=$(date +'%Y-%m-%d_%H-%M-%S')" >> $GITHUB_OUTPUT
-      
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Upload CSV as artifact
+      uses: actions/upload-artifact@v4
       with:
-        tag_name: scrape-${{ steps.timestamp.outputs.timestamp }}
-        release_name: YC Founders Data - ${{ steps.timestamp.outputs.timestamp }}
-        body: |
-          Automated scrape of YC Founders data
-          
-          Download the CSV file below
-          
-          Generated on: ${{ steps.timestamp.outputs.timestamp }}
-        draft: false
-        prerelease: false
+        name: yc-founders-data
+        path: yc_founders.csv
+        retention-days: 30
         
-    - name: Upload CSV to Release
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./yc_founders.csv
-        asset_name: yc_founders.csv
-        asset_content_type: text/csv
+    - name: Show download info
+      run: |
+        echo "✅ Scraping completed successfully!"
+        echo "📁 CSV file uploaded as artifact: yc-founders-data"
+        echo "🔗 You can download it from the Actions tab"
