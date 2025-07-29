@@ -5,6 +5,9 @@ on:
   schedule:
     - cron: '0 9 1,8,15,22 * *'
 
+permissions:
+  contents: write
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
@@ -12,7 +15,9 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -36,16 +41,3 @@ jobs:
       run: |
         sed -i 's/headless=False/headless=True/g' run_yc_scraper.py
         python run_yc_scraper.py
-        
-    - name: Upload CSV as artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: yc-founders-data
-        path: yc_founders.csv
-        retention-days: 30
-        
-    - name: Show download info
-      run: |
-        echo "✅ Scraping completed successfully!"
-        echo "📁 CSV file uploaded as artifact: yc-founders-data"
-        echo "🔗 You can download it from the Actions tab"
