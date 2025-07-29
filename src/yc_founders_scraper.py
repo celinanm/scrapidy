@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-YC Founders Scraper
-Scrapes founder information from Y Combinator's founders page including LinkedIn URLs
+YC Founders Scraper with Google Drive Upload
+Scrapes founder information from Y Combinator's founders page and uploads to Google Drive
 """
 
 import time
 import csv
 import re
+import os
+import json
 from typing import List, Dict, Optional
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -18,6 +20,10 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
 from bs4 import BeautifulSoup
 import pandas as pd
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+from google.oauth2.service_account import Credentials
+from datetime import datetime
 
 
 class YCFoundersScraper:
@@ -302,6 +308,73 @@ class YCFoundersScraper:
             print(f"Error extracting LinkedIn URL: {str(e)}")
             return None
     
+    def setup_google_drive_service(self):
+        """Set up Google Drive API service using service account credentials"""
+        try:
+            # Try to get credentials from environment variable (for GitHub Actions)
+            credentials_json = os.getenv('GOOGLE_SERVICE_ACCOUNT_KEY')
+            
+            if credentials_json:
+                # Parse JSON credentials from environment variable
+                credentials_info = json.loads(credentials_json)
+                credentials = Credentials.from_service_account_info(
+                    credentials_info,
+                    scopes=['https://www.googleapis.com/auth/drive.file']
+                )
+            else:
+                # Fallback to local credentials file (for local development)
+                credentials = Credentials.from_service_account_file(
+                    'service-account-key.json',
+                    scopes=['https://www.googleapis.com/auth/drive.file']
+                )
+            
+            service = build('drive', 'v3', credentials=credentials)
+            return service
+            
+        except Exception as e:
+            print(f"Error setting up Google Drive service: {str(e)}")
+            return None
+    
+    def upload_to_google_drive(self, filename: str, folder_id: str = None):
+        """Upload CSV file to Google Drive"""
+        try:
+            service = self.setup_google_drive_service()
+            if not service:
+                print("Failed to set up Google Drive service")
+                return False
+            
+            # Create timestamp for unique filename
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            drive_filename = f"yc_founders_{timestamp}.csv"
+            
+            # File metadata
+            file_metadata = {
+                'name': drive_filename
+            }
+            
+            # If folder_id is provided, set the parent folder
+            if folder_id:
+                file_metadata['parents'] = [folder_id]
+            
+            # Upload file
+            media = MediaFileUpload(filename, mimetype='text/csv')
+            file = service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id,name,webViewLink'
+            ).execute()
+            
+            print(f"✅ File uploaded to Google Drive successfully!")
+            print(f"📁 File name: {file.get('name')}")
+            print(f"🔗 File ID: {file.get('id')}")
+            print(f"🌐 View link: {file.get('webViewLink')}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error uploading to Google Drive: {str(e)}")
+            return False
+    
     def scrape_founders(self) -> List[Dict]:
         """Main scraping method"""
         try:
@@ -375,7 +448,22 @@ def main():
     
     # Save to CSV
     if founders_data:
-        scraper.save_to_csv(founders_data)
+        filename = "yc_founders.csv"
+        scraper.save_to_csv(founders_data, filename)
+        
+        # Upload to Google Drive
+        print("\n🚀 Uploading to Google Drive...")
+        
+        # Optional: Specify a folder ID where you want to upload the file
+        # Get this from your Google Drive URL: https://drive.google.com/drive/folders/YOUR_FOLDER_ID
+        folder_id = os.getenv('GOOGLE_DRIVE_FOLDER_ID')  # Set this as environment variable
+        
+        upload_success = scraper.upload_to_google_drive(filename, folder_id)
+        
+        if upload_success:
+            print("✅ Complete! CSV has been uploaded to Google Drive.")
+        else:
+            print("❌ Upload failed, but CSV file is saved locally.")
         
         # Print summary
         print("\nScraping Summary:")
